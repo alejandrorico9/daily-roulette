@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Roulette</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; display: flex; justify-content: center; padding: 2rem 1rem; }
+  .app { max-width: 480px; width: 100%; }
+  h1 { font-size: 1.5rem; text-align: center; margin-bottom: 0.25rem; color: #f8fafc; }
+  .subtitle { text-align: center; color: #64748b; font-size: 0.85rem; margin-bottom: 1.5rem; }
+  .current { background: #1e293b; border: 2px solid #3b82f6; border-radius: 12px; padding: 1.5rem; text-align: center; margin-bottom: 1.5rem; }
+  .current-label { font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  .current-name { font-size: 2rem; font-weight: 700; color: #3b82f6; }
+  .actions { display: flex; gap: 0.5rem; margin-top: 1rem; justify-content: center; }
+  button { border: none; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: opacity 0.15s; }
+  button:hover { opacity: 0.85; }
+  .btn-done { background: #22c55e; color: #fff; }
+  .btn-skip { background: #f59e0b; color: #fff; }
+  .queue { margin-bottom: 1.5rem; }
+  .queue h2 { font-size: 0.9rem; color: #94a3b8; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .queue-list { list-style: none; }
+  .queue-item { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.75rem; background: #1e293b; border-radius: 8px; margin-bottom: 0.35rem; }
+  .queue-item.current-in-list { border-left: 3px solid #3b82f6; }
+  .queue-pos { color: #64748b; font-size: 0.8rem; width: 1.5rem; }
+  .queue-name { flex: 1; font-weight: 500; }
+  .queue-remove { background: none; border: none; color: #ef4444; cursor: pointer; font-size: 1rem; padding: 0 0.25rem; opacity: 0.6; }
+  .queue-remove:hover { opacity: 1; }
+  .add-member { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+  .add-member input { flex: 1; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: 0.9rem; outline: none; }
+  .add-member input:focus { border-color: #3b82f6; }
+  .btn-add { background: #3b82f6; color: #fff; }
+  .history { margin-top: 1rem; }
+  .history h2 { font-size: 0.9rem; color: #94a3b8; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .history-list { list-style: none; max-height: 200px; overflow-y: auto; }
+  .history-item { padding: 0.4rem 0.75rem; font-size: 0.8rem; color: #94a3b8; background: #1e293b; border-radius: 6px; margin-bottom: 0.25rem; display: flex; justify-content: space-between; }
+  .reset-btn { background: #334155; color: #94a3b8; font-size: 0.75rem; margin-top: 1rem; display: block; width: 100%; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Daily Roulette</h1>
+  <p class="subtitle">Rotacion de daily standup</p>
+
+  <div class="current">
+    <div class="current-label">Hoy presenta</div>
+    <div class="current-name" id="currentName">-</div>
+    <div class="actions">
+      <button class="btn-done" onclick="markDone()">Listo</button>
+      <button class="btn-skip" onclick="skip()">No puede</button>
+    </div>
+  </div>
+
+  <div class="add-member">
+    <input type="text" id="newName" placeholder="Agregar integrante..." onkeydown="if(event.key==='Enter')addMember()">
+    <button class="btn-add" onclick="addMember()">Agregar</button>
+  </div>
+
+  <div class="queue">
+    <h2>Cola de rotacion</h2>
+    <ul class="queue-list" id="queueList"></ul>
+  </div>
+
+  <div class="history">
+    <h2>Historial</h2>
+    <ul class="history-list" id="historyList"></ul>
+  </div>
+
+  <button class="reset-btn" onclick="if(confirm('Resetear todo?')){localStorage.clear();location.reload()}">Resetear datos</button>
+</div>
+
+<script>
+const DEFAULT_MEMBERS = ['Ale', 'Nico', 'Cristobal', 'Sofi', 'Alberto', 'Alex', 'Seba'];
+
+function load(key, fallback) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+  catch { return fallback; }
+}
+function save(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
+
+// State
+let members = load('members', DEFAULT_MEMBERS);
+let pointer = load('pointer', 0);
+let history = load('history', []);
+
+function current() {
+  if (members.length === 0) return null;
+  pointer = pointer % members.length;
+  return members[pointer];
+}
+
+function render() {
+  // Current
+  document.getElementById('currentName').textContent = current() || 'Sin integrantes';
+
+  // Queue
+  const list = document.getElementById('queueList');
+  list.innerHTML = '';
+  members.forEach((m, i) => {
+    const li = document.createElement('li');
+    li.className = 'queue-item' + (i === pointer % members.length ? ' current-in-list' : '');
+    li.innerHTML = `
+      <span class="queue-pos">${i + 1}</span>
+      <span class="queue-name">${m}</span>
+      <button class="queue-remove" onclick="removeMember(${i})" title="Eliminar">&times;</button>
+    `;
+    list.appendChild(li);
+  });
+
+  // History
+  const hList = document.getElementById('historyList');
+  hList.innerHTML = '';
+  history.slice().reverse().forEach(h => {
+    const li = document.createElement('li');
+    li.className = 'history-item';
+    li.innerHTML = `<span>${h.name}</span><span>${h.date}</span>`;
+    hList.appendChild(li);
+  });
+}
+
+function advance() {
+  if (members.length === 0) return;
+  pointer = (pointer + 1) % members.length;
+  save('pointer', pointer);
+}
+
+function markDone() {
+  if (members.length === 0) return;
+  const name = current();
+  history.push({ name, date: new Date().toLocaleDateString('es-CL') });
+  save('history', history);
+  advance();
+  render();
+}
+
+function skip() {
+  if (members.length === 0) return;
+  advance();
+  render();
+}
+
+function addMember() {
+  const input = document.getElementById('newName');
+  const name = input.value.trim();
+  if (!name) return;
+  members.push(name);
+  save('members', members);
+  save('pointer', pointer);
+  input.value = '';
+  render();
+}
+
+function removeMember(index) {
+  if (!confirm(`Eliminar a ${members[index]}?`)) return;
+  members.splice(index, 1);
+  if (members.length === 0) pointer = 0;
+  else if (index < pointer) pointer--;
+  else if (pointer >= members.length) pointer = 0;
+  save('members', members);
+  save('pointer', pointer);
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
