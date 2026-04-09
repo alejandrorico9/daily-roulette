@@ -90,6 +90,21 @@ function current() {
   return members[pointer];
 }
 
+function getCounts() {
+  const counts = {};
+  members.forEach(m => counts[m] = 0);
+  history.forEach(h => { if (h.name in counts) counts[h.name]++; });
+  return counts;
+}
+
+function reorderByCount() {
+  const counts = getCounts();
+  members.sort((a, b) => counts[a] - counts[b]);
+  pointer = 0;
+  save('members', members);
+  save('pointer', pointer);
+}
+
 function render() {
   // Current
   document.getElementById('currentName').textContent = current() || 'Sin integrantes';
@@ -97,12 +112,13 @@ function render() {
   // Queue
   const list = document.getElementById('queueList');
   list.innerHTML = '';
+  const counts = getCounts();
   members.forEach((m, i) => {
     const li = document.createElement('li');
     li.className = 'queue-item' + (i === pointer % members.length ? ' current-in-list' : '');
     li.innerHTML = `
       <span class="queue-pos">${i + 1}</span>
-      <span class="queue-name">${m}</span>
+      <span class="queue-name">${m} <span style="color:#64748b;font-size:0.8rem">(${counts[m]})</span></span>
       <button class="queue-remove" onclick="removeMember(${i})" title="Eliminar">&times;</button>
     `;
     list.appendChild(li);
@@ -130,7 +146,7 @@ function markDone() {
   const name = current();
   history.push({ name, date: new Date().toLocaleDateString('es-CL') });
   save('history', history);
-  advance();
+  reorderByCount();
   render();
 }
 
